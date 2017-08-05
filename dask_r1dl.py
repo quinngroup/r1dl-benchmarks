@@ -1,11 +1,13 @@
-from dask.distributed import Client, Variable
-import dask.bag as db
-from operator import add
 import argparse
+import functools
+from operator import add
+import os
+
+from dask.distributed import Client, Variable
+import dask.array as da
+import dask.bag as db
 import numpy as np
 import scipy.linalg as sla
-import functools
-import os
 
 ###################################
 # Utility functions
