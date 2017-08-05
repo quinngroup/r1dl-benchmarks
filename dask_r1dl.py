@@ -3,23 +3,28 @@ import functools
 from operator import add
 import os
 
-from dask.distributed import Client, Variable
+from dask import delayed
+from dask.distributed import Client, LocalCluster, Variable
 import dask.array as da
 import dask.bag as db
 import numpy as np
 import scipy.linalg as sla
 
 ###################################
-# Utility functions
+# File I/O Functions
 ###################################
-def select_topr(vct_input, r):
-    """
-    Returns the R-th greatest elements indices
-    in input vector and store them in idxs_n.
-    """
-    temp = np.argpartition(-vct_input, r)
-    idxs_n = temp[:r]
-    return idxs_n
+
+@delayed(pure = True)
+def numpy_futures(future):
+    elements = future.compute()
+    rows = len(elements)
+    cols = len(elements[0].split())
+    retval = np.zeros(shape = (rows, cols))
+
+    for row, vals in enumerate(elements):
+        retval[row] = np.array(vals.split(), dtype = np.float)
+
+    return retval
 
 def input_to_rowmatrix(raw_rdd, indices, norm):
     """
@@ -33,6 +38,15 @@ def input_to_rowmatrix(raw_rdd, indices, norm):
 ###################################
 # Helper functions
 ###################################
+
+def select_topr(vct_input, r):
+    """
+    Returns the R-th greatest elements indices
+    in input vector and store them in idxs_n.
+    """
+    temp = np.argpartition(-vct_input, r)
+    idxs_n = temp[:r]
+    return idxs_n
 
 def parse_and_normalize(line, norm):
     """
@@ -131,8 +145,10 @@ if __name__ == "__main__":
         help = "If set, turns out debug output. [DEFAULT: False]")
 
     # Dask options.
-    parser.add_argument("-c", "--chunks", type = int, default = 1,
-        help = "Number of chunks (partitions) to use. [DEFAULT: 1]")
+    parser.add_argument("-c", "--chunksize", type = int, default = 100000,
+        help = "Size of chunks (partitions) to use. [DEFAULT: 100000]")
+    parser.add_argument("--ipaddr", default = None,
+        help = "IP address and port of the scheduler. [DEFAULT: None]")
 
     # Outputs.
     parser.add_argument("--atoms", default = "D.txt",
@@ -143,7 +159,6 @@ if __name__ == "__main__":
     args = vars(parser.parse_args())
 
     # Parse out the command-line arguments.
-    file_s = args['input']
     T = args['rows']
     P = args['cols']
 
@@ -153,12 +168,24 @@ if __name__ == "__main__":
     u_new = np.zeros(T)                  # atom updates at each iteration
     v = np.zeros(P)
     max_iterations = P * 10
+    chunksize = args['chunksize']
 
-    # In cluster mode, pass the address:port of the Scheduler 
-    client = Client()
+    # Determines whether we're in cluster or local mode.
+    if args['ipaddr'] is None:
+        client = Client(LocalCluster())
+        chunksize = 100  # Something really, really small
+    else:
+        client = Client(args['ipaddr'])
     
-    # Read a text file into a Dask bag ~ Spark RDD
-    input = db.read_text(file_s)
+    # Read the text file containing S into a bunch of delayed-s.
+    S_futures = db.read_text(args['input'],
+                            collection = False,
+                            blocksize = chunksize)
+    # Use the indices of the futures list as a way of ordering the chunks.
+    S_portions = [(index, numpy_futures(future)) for index, future in enumerate(S_futures)]
+
+
+    # Convert the futures into mini-NumPy arrays.
 
     #Apparently in Bags, you need another Bag which has the indices to zip with. Hence, creating indices for our data
     l = db.from_sequence(range(input.count()), npartitions = 1)
