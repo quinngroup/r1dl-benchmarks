@@ -29,6 +29,7 @@ def op_selectTopR(vct_input, R):
         indices will be stored and returned as major
         output of the function.
     """
+    R = int(R)
     temp = np.argpartition(-vct_input, R)
     idxs_n = temp[:R]
     return idxs_n
@@ -71,7 +72,7 @@ def op_getResidual(S, u, v, idxs_n):
     S = S - np.outer(u, v_sparse)
     return S
 
-def r1dl(S, nonzero, atoms, epsilon):
+def r1dl(S, nonzero, atoms, epsilon, seed = -1):
     """
     R1DL dictionary method.
 
@@ -85,6 +86,8 @@ def r1dl(S, nonzero, atoms, epsilon):
         Number of atoms in the resulting dictionary.
     epsilon : float
         Convergence epsilon in determining each dictionary atom.
+    seed : integer
+        Optional random seed for debugging. Set to -1 to disable (default: -1).
 
     Returns
     -------
@@ -108,6 +111,10 @@ def r1dl(S, nonzero, atoms, epsilon):
     Z = np.zeros((atoms, P), dtype = np.float)
     D = np.zeros((atoms, T), dtype = np.float)
     idxs_n = np.zeros(int(R), dtype = np.int)
+
+    # Set a random seed?
+    if seed > -1:
+        np.random.seed(seed)
 
     epsilon *= epsilon
     for m in range(atoms):
@@ -137,7 +144,7 @@ def r1dl(S, nonzero, atoms, epsilon):
                 # Copying the new vector on old one
             u_old = u_new
         S = op_getResidual(S, u_new, v, idxs_n)
-        totoalResidual = np.sum(S ** 2)
+        # totoalResidual = np.sum(S ** 2)
         Z[m, :] = v
         D[m, :] = u_new
 
@@ -158,6 +165,10 @@ if __name__ == "__main__":
     parser.add_argument("-e", "--epsilon", type = float, required = True,
         help = "The value of epsilon.")
 
+    # Optional, debugging arguments.
+    parser.add_argument("-s", "--seed", type = float, default = -1,
+        help = "The random seed used to replicate results. [DEFAULT: -1]")    
+
     # Output arguments.
     parser.add_argument("-d", "--dictionary", required = True,
         help = "Dictionary (D) output file.")
@@ -176,7 +187,7 @@ if __name__ == "__main__":
 
     # Read the inputs and generate variables to pass to R1DL.
     S = np.loadtxt(file_s)
-    D, Z = r1dl(S, R, M, epsilon)
+    D, Z = r1dl(S, R, M, epsilon, args['seed'])
 
     # Write the output to files.
     np.savetxt(file_D, D, fmt = '%.5lf\t')
