@@ -123,16 +123,19 @@ def r1dl(S, nonzero, atoms, epsilon):
             '''
             UGLY HACK!!
 
-            Dask arrays are immutable. So, couldn't find a 
-            way to zero out all elements of v not in topR or 
+            Dask arrays are immutable. 
+            https://stackoverflow.com/questions/36142892/item-assignment-to-python-dask-array-objects
+
+            Couldn't find a way to zero out all elements of v not in topR or 
             the other way round.
-            The only option we could think of was to
-            extract the max value and match it with v. All other
+
+            1st option: Extract the max value and match it with v. All other
             indices are initialzed to 0 but the matched one.  
             This will work only in cases with len(max_values) = 1
             as np.where cannot accomodate a list in where condition.
-            Also, dask doesn't seem to have any function which
-            can get indices of array.
+            
+            2nd option: Make v as numpy array, perform the updates, convert to dask.array. 
+            Not sure whether this is the right way to do it.
             '''
             max_values = max_values.flatten()
             max_values = max_values[0].compute()
